@@ -33,8 +33,11 @@ fun main(args: Array<String>) {
     // make the svg file
     File("stars.svg").printWriter().use { out ->
 
-        out.println("""<svg width="180" height="180">""")
-        out.println("""<circle cx="90" cy="90" r="90" stroke="white" stroke-width="1" fill="black" />""")
+        out.println(""" <svg width="180" height="180">
+                        <style>
+                            .properName { font: italic 0.3px sans-serif; stroke-width: 0.01px; stroke: white; fill: black }
+                        </style>
+                        <circle cx="90" cy="90" r="90" stroke="white" stroke-width="1" fill="black" />""".trimIndent())
 //        history.forEach {
 //            out.println("${it.key}, ${it.value}")
 //        }
@@ -48,7 +51,8 @@ fun main(args: Array<String>) {
         var minMagnitude = Double.POSITIVE_INFINITY
 
         // read the hyg database...
-        parseHygDB()
+        HygParser()
+                .parse()
                 // filter stars visible to the naked eye
                 .filter { star ->
                     star.mag <= apparentMagnitudeCutOff
@@ -108,6 +112,11 @@ fun main(args: Array<String>) {
                         // print it to svg
                         val random = Random()
                         out.println("""<circle cx="${x}" cy="${y}" r="$circleR" fill="white"/>""")
+
+                        // print name?
+                        if (star.properName?.isNotEmpty() == true) {
+                            out.println("""<text x="$x" y="$y" class="properName">${star.properName}</text>""")
+                        }
                     }
 
                     if (altitude < minAltitude)
@@ -191,65 +200,3 @@ fun getDistanceFromLatLonInKm(lat1: Double, lon1: Double, lat2: Double, lon2: Do
 fun deg2rad(deg: Double): Double {
     return deg * (Math.PI / 180)
 }
-
-/**
- * Read the HYG database.
- */
-fun parseHygDB(): Stream<Starr> {
-    // get the csv reader
-    val csvReader = CSVReaderBuilder(FileReader("data/hygdata_v3.csv"))
-            .withSkipLines(1)
-            .build()
-
-    // stream the lines
-    // indices that we're interested in
-    val id = 0
-    val hip = 1
-    val hd = 2
-    val hr = 3
-    val gl = 4
-    val bf = 5
-    val proper = 6
-    val ra = 7
-    val dec = 8
-    val dist = 9
-    val pmra = 10
-    val pmdec = 11
-    val rv = 12
-    val mag = 13
-    val absmag = 14
-    val spect = 15
-    val ci = 16
-    val x = 17
-    val y = 18
-    val z = 19
-    val vx = 20
-    val vy = 21
-    val vz = 22
-    val rarad = 23
-    val decrad = 24
-    val pmrarad = 25
-    val pmdecrad = 26
-    val bayer = 27
-    val flam = 28
-    val con = 29
-    val comp = 30
-    val comp_primary = 31
-    val base = 32
-    val lum = 33
-    val varrrr = 34
-    val var_min = 35
-
-    return csvReader.map {
-        //        println("it = ${Arrays.toString(it)}")
-        Starr(
-                ra = it[ra].toDouble(),
-                dec = it[dec].toDouble(),
-                mag = it[mag].toDouble(),
-                absmag = it[absmag].toDouble()
-        )
-    }.stream()
-
-}
-
-data class Starr(val ra: Double, val dec: Double, val mag: Double, val absmag: Double)
