@@ -7,11 +7,14 @@ import com.singulariti.os.ephemeris.domain.Star
 import com.singulariti.os.ephemeris.utils.StarCatalog
 import java.io.File
 import java.io.FileReader
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.*
+import java.util.concurrent.TimeUnit
 import java.util.stream.Stream
+import javax.xml.datatype.DatatypeConstants.HOURS
 import kotlin.math.absoluteValue
 
 
@@ -25,17 +28,26 @@ import kotlin.math.absoluteValue
 fun main(args: Array<String>) {
     // set the place and time you want
     val starPositionCalculator = StarPositionCalculator()
+
     val observatory = getObservatory()
 
-    // at least get this absolute magnitude (smaller is brighter)
-    val apparentMagnitudeCutOff = 6.5
+    // at least get this absolute magnitude (smaller is brighter) 6.5 = human vis
+    val apparentMagnitudeCutOff = 7
 
     // make the svg file
     File("stars.svg").printWriter().use { out ->
 
         out.println(""" <svg width="180" height="180">
                         <style>
-                            .properName { font: italic 0.3px sans-serif; stroke-width: 0.01px; stroke: white; fill: black }
+                            .properName { font: italic 1px sans-serif; stroke-width: 0.03px; stroke: white; fill: black }
+                            .constellationName { font: italic 0.2px sans-serif; stroke-width: 0.03px }
+                            .colorClassO5V { fill: #f0f8ff }
+                            .colorClassB0V { fill: #f2f6ff }
+                            .colorClassA0V { fill: #effbff }
+                            .colorClassF0V { fill: #fffffb }
+                            .colorClassG0V { fill: #ffffce }
+                            .colorClassK0V { fill: #fff8a0 }
+                            .colorClassDefault { fill: white }
                         </style>
                         <circle cx="90" cy="90" r="90" stroke="white" stroke-width="1" fill="black" />""".trimIndent())
 //        history.forEach {
@@ -44,11 +56,9 @@ fun main(args: Array<String>) {
         // second attempt
         val calendarAstronomer = CalendarAstronomer(Date(Instant.parse("2018-10-05T10:15:30.00Z").toEpochMilli()))
 
-        var maxAltitude = Double.NEGATIVE_INFINITY
-        var minAltitude = Double.POSITIVE_INFINITY
+        val colorIndices = HashSet<String>()
 
-        var maxMagnitude = Double.NEGATIVE_INFINITY
-        var minMagnitude = Double.POSITIVE_INFINITY
+        val casA = StarCatalog.byIdAndConstellation("a", "cas")
 
         // read the hyg database...
         HygParser()
@@ -59,17 +69,19 @@ fun main(args: Array<String>) {
                 }
                 .forEach { star ->
 
-                    if (star.absmag < minMagnitude)
-                        minMagnitude = star.absmag
-                    if (star.absmag > minMagnitude)
-                        maxMagnitude = star.absmag
+                    colorIndices.add(star.colorIndex)
+
+                    val convertDegreesToHoursMinutesSeconds = convertDecimalHoursToHMS(star.ra)
+                    val convertDegreesToHoursMinutesSeconds1 = convertDecimalHoursToHMS(star.dec)
+
+                    println("convertDegreesToHoursMinutesSeconds = ${convertDegreesToHoursMinutesSeconds} ${convertDegreesToHoursMinutesSeconds1}")
 
                     val star1 = Star(
                             null,
                             null,
                             null,
-                            convertDegreesToHoursMinutesSeconds(star.ra),
-                            convertDegreesToHoursMinutesSeconds(star.dec),
+                            convertDegreesToHoursMinutesSeconds,
+                            convertDegreesToHoursMinutesSeconds1,
                             star.mag.toInt().toString(),
                             null,
                             null
@@ -77,6 +89,7 @@ fun main(args: Array<String>) {
 
                     // print the star
                     println("it = $star")
+                    println(" > star1 = ${star1.ra} ${star1.de}")
 
                     val position = starPositionCalculator.getPosition(star1, observatory)
 //        println("position = $position")
@@ -106,35 +119,63 @@ fun main(args: Array<String>) {
                         y += 90
                         x += 90
 
+                        // figure out the color
+                        val colorClass = if (star.colorIndex.isNotEmpty()) {
+                            star.colorIndex.toDouble().let {
+                                when {
+                                    it <= -.33 -> "colorClassO5V"
+                                    it <= -.3 -> "colorClassB0V"
+                                    it <= -0.02 -> "colorClassA0V"
+                                    it <= 0.3 -> "colorClassF0V"
+                                    it <= 0.58 -> "colorClassG0V"
+                                    it <= 0.81 -> "colorClassK0V"
+                                    it <= 1.40 -> "colorClassM0V"
+                                    else -> "colorClassDefault"
+                                }
+                            }
+                        } else {
+                            "colorClassDefault"
+                        }
+
                         // determine the size of the circle -> depending on the apparent magnitude
                         val circleR = ((star.mag - apparentMagnitudeCutOff) * -1) * 0.05
 
                         // print it to svg
                         val random = Random()
-                        out.println("""<circle cx="${x}" cy="${y}" r="$circleR" fill="white"/>""")
+                        out.println("""<circle cx="${x}" cy="${y}" r="$circleR" class="$colorClass"/>""")
 
                         // print name?
                         if (star.properName?.isNotEmpty() == true) {
                             out.println("""<text x="$x" y="$y" class="properName">${star.properName}</text>""")
                         }
-                    }
 
-                    if (altitude < minAltitude)
-                        minAltitude = altitude
-                    if (altitude > maxAltitude)
-                        maxAltitude = altitude
+                        if (star.constellationAbbreviation?.isNotEmpty()) {
+                            val col = when (star.constellationAbbreviation) {
+                                "Dra" -> "red"
+                                "UMa" -> "green"
+                                "Her" -> "blue"
+                                else -> "white"
+                            }
+                            out.println("""<text x="$x" y="$y" class="constellationName" fill="$col" stroke="$col">${star.constellationAbbreviation}</text>""")
+                        }
+                    } else {
+//                        println("skipping star... $altitude")
+                    }
 
                     // filter the stars on altitude
                 }
 
-        println("minAltitude = ${minAltitude}")
-        println("maxAltitude = ${maxAltitude}")
-        println("minMagnitude = ${minMagnitude}")
-        println("maxMagnitude = ${maxMagnitude}")
+        val minRaa = HygParser().parse().mapToDouble { star -> star.ra }.min()
+        println("minRa = ${minRaa}")
+        val maxRaa = HygParser().parse().mapToDouble { star -> star.ra }.max()
+        println("maxRa = ${maxRaa}")
+        val minDec = HygParser().parse().mapToDouble { star -> star.dec }.min()
+        println("minDec = ${minDec}")
+        val maxDec = HygParser().parse().mapToDouble { star -> star.dec }.max()
+        println("maxDec = ${maxDec}")
 
         out.println("</svg>")
     }
-
 
 }
 
@@ -155,23 +196,32 @@ fun dmsToRad(input: String): Double {
  * Default position: gontrodestraat
  */
 fun getObservatory(name: String = "Default place name", latitude: Double = 51.027930, longitude: Double = 3.753585): Observatory {
-    val time = ZonedDateTime.of(2018, 10, 5, 16, 0, 0, 0, ZoneId.of("UTC")) //Date and time in UTC
+    val time = ZonedDateTime.of(2018, 10, 5, 19, 0, 0, 0, ZoneId.of("UTC")) //Date and time in UTC
     val place = Place(name, latitude, Pole.NORTH, longitude, Pole.EAST, TimeZone.getTimeZone("Asia/Calcutta"), "", "")
     return Observatory(place, time)
 }
 
 /**
- * Convert 2.39483 degrees to X:Y:Z, X hours, Y minutes, Z seconds
+ * Convert 21.9384 hours to X:Y:Z, X hours, Y minutes, Z seconds
  */
-fun convertDegreesToHoursMinutesSeconds(degrees: Double): String {
-    val hours = Math.floor(degrees).toInt()
-    val minutesWithRest = (degrees - hours) * 60
+fun convertDecimalHoursToHMS(degrees: Double): String {
+    // what's the sign?
+    val sign = if(degrees<0) "-" else "+"
+    val input = degrees.absoluteValue
+    val hours = Math.floor(input).toInt()
+    val minutesWithRest = (input - hours) * 60
     val minutes = Math.floor(minutesWithRest).toInt()
-    val seconds = (minutesWithRest - minutes) * 60
-    val result = "$hours:$minutes:$seconds"
+    val seconds = ((minutesWithRest - minutes) * 60).toInt()
+    val result = "${sign}$hours:$minutes:$seconds"
     return result
 }
 
+/**
+ * Convert 25.5 degrees to 25 degrees, 5
+ */
+fun convertDecimalDegreesToDMS(degrees: Double): String {
+    return convertDecimalHoursToHMS(degrees)
+}
 
 fun testEphemeris() {
 
@@ -199,4 +249,8 @@ fun getDistanceFromLatLonInKm(lat1: Double, lon1: Double, lat2: Double, lon2: Do
 
 fun deg2rad(deg: Double): Double {
     return deg * (Math.PI / 180)
+}
+
+fun hoursToDms(hours: Double) {
+
 }

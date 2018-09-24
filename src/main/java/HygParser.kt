@@ -58,7 +58,10 @@ class HygParser {
                     dec = it[dec].toDouble(),
                     mag = it[mag].toDouble(),
                     absmag = it[absmag].toDouble(),
-                    properName = it[proper]
+                    properName = it[proper],
+                    colorIndex = it[ci],
+                    bayerFlamsteed = it[bf],
+                    constellationAbbreviation = it[con]
             )
         }.stream()
 
