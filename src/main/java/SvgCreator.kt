@@ -7,6 +7,7 @@ import com.singulariti.os.ephemeris.domain.Star
 import com.singulariti.os.ephemeris.utils.StarCatalog
 import java.io.File
 import java.io.FileReader
+import java.io.PrintWriter
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -35,7 +36,7 @@ fun main(args: Array<String>) {
     val apparentMagnitudeCutOff = 7
 
     // make the svg file
-    File("stars.svg").printWriter().use { out ->
+    val block: (PrintWriter) -> Unit = { out ->
 
         out.println(""" <svg width="180" height="180">
                         <style>
@@ -54,7 +55,10 @@ fun main(args: Array<String>) {
 //            out.println("${it.key}, ${it.value}")
 //        }
         // second attempt
-        val calendarAstronomer = CalendarAstronomer(Date(Instant.parse("2018-10-05T10:15:30.00Z").toEpochMilli()))
+//        val calendarAstronomer = CalendarAstronomer(Date(Instant.parse("2018-10-05T10:15:30.00Z").toEpochMilli()))
+        val calendarAstronomer = CalendarAstronomer(51.02, 3.74)
+        val d = Date(Instant.parse("2018-10-05T10:15:30.00Z").toEpochMilli())
+        calendarAstronomer.date = d
 
         val colorIndices = HashSet<String>()
 
@@ -73,6 +77,8 @@ fun main(args: Array<String>) {
 
                     val convertDegreesToHoursMinutesSeconds = convertDecimalHoursToHMS(star.ra)
                     val convertDegreesToHoursMinutesSeconds1 = convertDecimalHoursToHMS(star.dec)
+
+                    calendarAstronomer
 
                     println("convertDegreesToHoursMinutesSeconds = ${convertDegreesToHoursMinutesSeconds} ${convertDegreesToHoursMinutesSeconds1}")
 
@@ -114,6 +120,8 @@ fun main(args: Array<String>) {
                         // draw the star! figure out an x,y coordinate on a circle
                         var y = Math.sin(azimuth) * r
                         var x = Math.cos(azimuth) * r
+
+                        println("azimuth = ${azimuth} altitude = $altitude")
 
                         // shift everything +90 -> make sure the center of the circle is at (90,90)
                         y += 90
@@ -176,6 +184,7 @@ fun main(args: Array<String>) {
 
         out.println("</svg>")
     }
+    File("stars.svg").printWriter().use(block)
 
 }
 
