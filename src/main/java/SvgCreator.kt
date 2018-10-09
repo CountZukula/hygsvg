@@ -1,265 +1,216 @@
-import com.opencsv.CSVReaderBuilder
-import com.singulariti.os.ephemeris.StarPositionCalculator
-import com.singulariti.os.ephemeris.domain.Observatory
-import com.singulariti.os.ephemeris.domain.Place
-import com.singulariti.os.ephemeris.domain.Pole
-import com.singulariti.os.ephemeris.domain.Star
-import com.singulariti.os.ephemeris.utils.StarCatalog
+import model.HygParser
 import java.io.File
-import java.io.FileReader
 import java.io.PrintWriter
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.util.*
-import java.util.concurrent.TimeUnit
-import java.util.stream.Stream
-import javax.xml.datatype.DatatypeConstants.HOURS
-import kotlin.math.absoluteValue
-
+import kotlin.math.*
 
 /**
- * <svg width="100" height="100">
-<circle cx="50" cy="50" r="40" stroke="green" stroke-width="4" fill="yellow" />
-</svg>
-
-180 becomes 18000 -> add 2 digits of precision to everything
+ * This function parses the input file (input/hygdata_v3.csv) and outputs an SVG file containing all stars above the given observer.
+ *
+ * Based this code on explanation found at http://jknight8.tripod.com/CelestialToAzEl.html#the%20source%20code
  */
+
 fun main(args: Array<String>) {
-    // set the place and time you want
-    val starPositionCalculator = StarPositionCalculator()
+    // example values
+    val JD = 2458397.0
+    val LAT = 51.027930
+    val LON = 3.753585
 
-    val observatory = getObservatory()
+    // create the file
+    SvgCreator().createSVGFile(LAT, LON, JD)
+}
 
-    // at least get this absolute magnitude (smaller is brighter) 6.5 = human vis
-    val apparentMagnitudeCutOff = 7
+/**
+ * This class is capable of taking the Hyg database and outputting an SVG files full of stars.
+ *
+ * @param apparentMagnitudeCutOff at least get this absolute magnitude (smaller is brighter, 6.5 = visible by humans)
+ * @param nameOffset how much the name of a star is shifted up/right with regards to the star itself
+ */
+class SvgCreator(val apparentMagnitudeCutOff: Double = 7.0,
+                 val outputFile: File = File("output/stars.svg"),
+                 val overwriteOutputFile: Boolean = true,
+                 val nameOffset: Double = 0.5
+) {
 
-    // make the svg file
-    val block: (PrintWriter) -> Unit = { out ->
+    /**
+     * For the given observer's location (lat/lon), at the given time (jd), create a view of all stars overhead.
+     */
+    fun createSVGFile(LAT: Double, LON: Double, JD: Double) {
 
-        out.println(""" <svg width="180" height="180">
+        val D = JD - 2451545.0
+        val GMSThours = 18.697374558 + 24.06570982441908 * D
+        val GMST = (GMSThours % 24) * 15
+        val LMST = GMST + LON
+
+        val colorIndices = listOf(
+                -0.33 to "O5",
+                -0.17 to "B5",
+                0.15 to "A5",
+                0.44 to "F5",
+                0.68 to "G5",
+                1.15 to "K5",
+                1.64 to "M5"
+        )
+
+        // set up the print operation...
+        val block: (PrintWriter) -> Unit = { out ->
+            /**
+             *
+            .colorClassO5V { fill: #f0f8ff }
+            .colorClassB0V { fill: #f2f6ff }
+            .colorClassA0V { fill: #effbff }
+            .colorClassF0V { fill: #fffffb }
+            .colorClassG0V { fill: #ffffce }
+            .colorClassK0V { fill: #fff8a0 }
+            .colorClassM0V { fill: #fff8a0 }
+            .colorClassDefault { fill: white }
+
+
+            http://www.vendian.org/mncharity/dir3/starcolor/
+             */
+
+            // this outputs some default styling... changes this if you want
+            out.println("""<svg width="180" height="180">
                         <style>
-                            .properName { font: italic 1px sans-serif; stroke-width: 0.03px; stroke: white; fill: black }
+                            .properName { font: italic 1px sans-serif; stroke-width: 0.02px; stroke: black; }
                             .constellationName { font: italic 0.2px sans-serif; stroke-width: 0.03px }
-                            .colorClassO5V { fill: #f0f8ff }
-                            .colorClassB0V { fill: #f2f6ff }
-                            .colorClassA0V { fill: #effbff }
-                            .colorClassF0V { fill: #fffffb }
-                            .colorClassG0V { fill: #ffffce }
-                            .colorClassK0V { fill: #fff8a0 }
+                            .colorClassO5 { fill: #9bb0ff }
+                            .colorClassB5 { fill: #aabfff }
+                            .colorClassA5 { fill: #cad7ff }
+                            .colorClassF5 { fill: #f8f7ff }
+                            .colorClassG5 { fill: #fff4ea }
+                            .colorClassK5 { fill: #ffd2a1 }
+                            .colorClassM5 { fill: #ffcc6f }
                             .colorClassDefault { fill: white }
                         </style>
                         <circle cx="90" cy="90" r="90" stroke="white" stroke-width="1" fill="black" />""".trimIndent())
-//        history.forEach {
-//            out.println("${it.key}, ${it.value}")
-//        }
-        // second attempt
-//        val calendarAstronomer = CalendarAstronomer(Date(Instant.parse("2018-10-05T10:15:30.00Z").toEpochMilli()))
-        val calendarAstronomer = CalendarAstronomer(51.02, 3.74)
-        val d = Date(Instant.parse("2018-10-05T10:15:30.00Z").toEpochMilli())
-        calendarAstronomer.date = d
 
-        val colorIndices = HashSet<String>()
+            // loop over stars
+            HygParser().parse()
+                    .filter { star -> star.mag <= apparentMagnitudeCutOff }
+                    .forEach { star ->
+                        // take a right ascension in hours, convert to degrees
+                        var RA = star.ra
+                        RA = (RA % 24) * 15
 
-        val casA = StarCatalog.byIdAndConstellation("a", "cas")
+                        // DEC is in range of -90 to 90... convert to 0 to 360
+                        var DEC = star.dec
+                        if (DEC < 0)
+                            DEC += 360
 
-        // read the hyg database...
-        HygParser()
-                .parse()
-                // filter stars visible to the naked eye
-                .filter { star ->
-                    star.mag <= apparentMagnitudeCutOff
-                }
-                .forEach { star ->
+                        // convert to azimuth / altitude, all in degrees
+                        var HA = LMST - RA
+                        if (HA < 0)
+                            HA += 360
 
-                    colorIndices.add(star.colorIndex)
-
-                    val convertDegreesToHoursMinutesSeconds = convertDecimalHoursToHMS(star.ra)
-                    val convertDegreesToHoursMinutesSeconds1 = convertDecimalHoursToHMS(star.dec)
-
-                    calendarAstronomer
-
-                    println("convertDegreesToHoursMinutesSeconds = ${convertDegreesToHoursMinutesSeconds} ${convertDegreesToHoursMinutesSeconds1}")
-
-                    val star1 = Star(
-                            null,
-                            null,
-                            null,
-                            convertDegreesToHoursMinutesSeconds,
-                            convertDegreesToHoursMinutesSeconds1,
-                            star.mag.toInt().toString(),
-                            null,
-                            null
-                    )
-
-                    // print the star
-                    println("it = $star")
-                    println(" > star1 = ${star1.ra} ${star1.de}")
-
-                    val position = starPositionCalculator.getPosition(star1, observatory)
-//        println("position = $position")
-
-                    // is the star inside the radius?
-//        getDistanceFromLatLonInKm(observatory.latitude, observatory.longitude, position.);
-
-//            println("position.altitude = ${position.altitude}, ${position.azimuth} ${dmsToRad(position.altitude)}")
-
-
-                    val altitude = dmsToRad(position.altitude)
-
-                    assert(altitude.absoluteValue <= 90)
-
-                    // only allow stars above the horizon
-                    if (altitude >= 0) {
-                        // alpha -> the angle on the circle, which would be the azimuth
-                        val azimuth = dmsToRad(position.azimuth)
-                        // r -> this represents the altitude, map it to 0-90
-                        // altitude 0 means the outside of the circle... r is 90 then
-                        val r = 90 - altitude
-                        // draw the star! figure out an x,y coordinate on a circle
-                        var y = Math.sin(azimuth) * r
-                        var x = Math.cos(azimuth) * r
-
-                        println("azimuth = ${azimuth} altitude = $altitude")
-
-                        // shift everything +90 -> make sure the center of the circle is at (90,90)
-                        y += 90
-                        x += 90
-
-                        // figure out the color
-                        val colorClass = if (star.colorIndex.isNotEmpty()) {
-                            star.colorIndex.toDouble().let {
-                                when {
-                                    it <= -.33 -> "colorClassO5V"
-                                    it <= -.3 -> "colorClassB0V"
-                                    it <= -0.02 -> "colorClassA0V"
-                                    it <= 0.3 -> "colorClassF0V"
-                                    it <= 0.58 -> "colorClassG0V"
-                                    it <= 0.81 -> "colorClassK0V"
-                                    it <= 1.40 -> "colorClassM0V"
-                                    else -> "colorClassDefault"
+                        val sinALT = (sinDeg(DEC) * sinDeg(LAT)) + (cosDeg(DEC) * cosDeg(LAT) * cosDeg(HA))
+                        val ALT = asinDeg(sinALT)
+                        val cosA = (sinDeg(DEC) - sinDeg(ALT) * sinDeg(LAT)) / (cosDeg(ALT) * cosDeg(LAT))
+                        val A = acosDeg(cosA)
+                        val AZ =
+                                if (sinDeg(HA) < 0) {
+                                    A
+                                } else {
+                                    360 - A
                                 }
-                            }
+
+                        if (ALT < 0) {
+                            // do nothing... it's below to horizon
                         } else {
-                            "colorClassDefault"
-                        }
+                            // altitude 0 means the outside of the circle... r is 90 then
+                            val r = 90 - ALT
+                            // draw the star! figure out an x,y coordinate on a circle
+                            var y = sinDeg(AZ) * r
+                            var x = cosDeg(AZ) * r
 
-                        // determine the size of the circle -> depending on the apparent magnitude
-                        val circleR = ((star.mag - apparentMagnitudeCutOff) * -1) * 0.05
 
-                        // print it to svg
-                        val random = Random()
-                        out.println("""<circle cx="${x}" cy="${y}" r="$circleR" class="$colorClass"/>""")
+                            // shift everything +90 -> make sure the center of the circle is at (90,90)
+                            y += 90
+                            x += 90
 
-                        // print name?
-                        if (star.properName?.isNotEmpty() == true) {
-                            out.println("""<text x="$x" y="$y" class="properName">${star.properName}</text>""")
-                        }
+                            // figure out the closest color index that we know
+//                    -0.33	 	O5	Blue
+//                    -0.17	 	B5	Blue-white
+//                    0.15	 	A5	White with bluish tinge
+//                    0.44	 	F5	Yellow-White
+//                    0.68	 	G5	Yellow
+//                    1.15	 	K5	Orange
+//                    1.64	 	M5	Red
 
-                        if (star.constellationAbbreviation?.isNotEmpty()) {
-                            val col = when (star.constellationAbbreviation) {
-                                "Dra" -> "red"
-                                "UMa" -> "green"
-                                "Her" -> "blue"
-                                else -> "white"
+                            // figure out the color
+                            val colorClass = if (star.colorIndex.isNotEmpty()) {
+
+                                val theColor = colorIndices.map { color ->
+                                    color to abs(color.first - star.colorIndex.toDouble())
+                                }.sortedBy {
+                                    it.second
+                                }.first().first.second
+
+                                "colorClass$theColor"
+                            } else {
+                                "colorClassDefault"
                             }
-                            out.println("""<text x="$x" y="$y" class="constellationName" fill="$col" stroke="$col">${star.constellationAbbreviation}</text>""")
+
+                            // determine the size of the circle -> depending on the apparent magnitude
+                            val circleR = ((star.mag - apparentMagnitudeCutOff) * -1) * 0.05
+
+                            // print name?
+                            if (star.properName?.isNotEmpty() == true) {
+//                    out.println("""<text x="$x" y="$y" class="properName">${star.properName}</text>""")
+                                // write the text to the top right of the star
+                                out.println("""<text x="${x + nameOffset}" y="${y - nameOffset}" class="properName $colorClass">${star.properName}</text>""")
+                            }
+
+                            out.println("""<circle cx="${x}" cy="${y}" r="$circleR" class="$colorClass"/>""")
+
+                            // not really doing anything with this yet... printing the constellation name in a specific color if you want
+//                if (star.constellationAbbreviation?.isNotEmpty()) {
+//                    val col = when (star.constellationAbbreviation) {
+//                        "Dra" -> "red"
+//                        "UMa" -> "green"
+//                        "Her" -> "blue"
+//                        else -> "white"
+//                    }
+//                    out.println("""<text x="$x" y="$y" class="constellationName" fill="$col" stroke="$col">${star.constellationAbbreviation}</text>""")
+//                }
                         }
-                    } else {
-//                        println("skipping star... $altitude")
                     }
 
-                    // filter the stars on altitude
-                }
+            out.println("</svg>")
+        }
 
-        val minRaa = HygParser().parse().mapToDouble { star -> star.ra }.min()
-        println("minRa = ${minRaa}")
-        val maxRaa = HygParser().parse().mapToDouble { star -> star.ra }.max()
-        println("maxRa = ${maxRaa}")
-        val minDec = HygParser().parse().mapToDouble { star -> star.dec }.min()
-        println("minDec = ${minDec}")
-        val maxDec = HygParser().parse().mapToDouble { star -> star.dec }.max()
-        println("maxDec = ${maxDec}")
+        // ... and actually do the print
+        if (overwriteOutputFile) {
+            outputFile.delete()
+        }
+        outputFile.printWriter().use(block)
 
-        out.println("</svg>")
     }
-    File("stars.svg").printWriter().use(block)
-
 }
 
 /**
- * Convert XX:XX to degrees.
+ * The non-radial version of sin.
  */
-fun dmsToRad(input: String): Double {
-    val resMod = if (input.startsWith("-")) -1 else 1
-    val split = input.split(":")
-    var result = 0.0
-    result += split[0].toDouble().absoluteValue
-    if (split.size > 1)
-        result += (split[1].toDouble() / 60)
-    return result * resMod
+fun sinDeg(degrees: Double): Double {
+    return sin(Math.toRadians(degrees))
 }
 
 /**
- * Default position: gontrodestraat
+ * The non-radial version of cos.
  */
-fun getObservatory(name: String = "Default place name", latitude: Double = 51.027930, longitude: Double = 3.753585): Observatory {
-    val time = ZonedDateTime.of(2018, 10, 5, 19, 0, 0, 0, ZoneId.of("UTC")) //Date and time in UTC
-    val place = Place(name, latitude, Pole.NORTH, longitude, Pole.EAST, TimeZone.getTimeZone("Asia/Calcutta"), "", "")
-    return Observatory(place, time)
+fun cosDeg(degrees: Double): Double {
+    return cos(Math.toRadians(degrees))
 }
 
 /**
- * Convert 21.9384 hours to X:Y:Z, X hours, Y minutes, Z seconds
+ * The non-radial version of asin.
  */
-fun convertDecimalHoursToHMS(degrees: Double): String {
-    // what's the sign?
-    val sign = if(degrees<0) "-" else "+"
-    val input = degrees.absoluteValue
-    val hours = Math.floor(input).toInt()
-    val minutesWithRest = (input - hours) * 60
-    val minutes = Math.floor(minutesWithRest).toInt()
-    val seconds = ((minutesWithRest - minutes) * 60).toInt()
-    val result = "${sign}$hours:$minutes:$seconds"
-    return result
+fun asinDeg(sin: Double): Double {
+    return Math.toDegrees(asin(sin))
 }
 
 /**
- * Convert 25.5 degrees to 25 degrees, 5
+ * The non-radial version of acos.
  */
-fun convertDecimalDegreesToDMS(degrees: Double): String {
-    return convertDecimalHoursToHMS(degrees)
-}
-
-fun testEphemeris() {
-
-
-    val starCalculator = StarPositionCalculator()
-    val casA = StarCatalog.byIdAndConstellation("a", "cas")
-//    val casAPosition = starCalculator.getPosition(casA, hassan)
-
-//    println("casA = $casAPosition")
-}
-
-fun getDistanceFromLatLonInKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    var R = 6371; // Radius of the earth in km
-    var dLat = deg2rad(lat2 - lat1);  // deg2rad below
-    var dLon = deg2rad(lon2 - lon1);
-    var a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-                    Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    ;
-    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    var d = R * c; // Distance in km
-    return d
-}
-
-fun deg2rad(deg: Double): Double {
-    return deg * (Math.PI / 180)
-}
-
-fun hoursToDms(hours: Double) {
-
+fun acosDeg(cos: Double): Double {
+    return Math.toDegrees(acos(cos))
 }

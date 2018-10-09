@@ -1,1 +1,0 @@
-data class HygStar(val ra: Double, val dec: Double, val mag: Double, val absmag: Double, val properName: String?, val colorIndex: String, val bayerFlamsteed: String, val constellationAbbreviation: String)

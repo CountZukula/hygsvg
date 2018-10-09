@@ -1,19 +1,29 @@
+package model
+
 import com.opencsv.CSVReaderBuilder
+import java.io.File
 import java.io.FileReader
 import java.util.stream.Stream
 
 class HygParser {
     /**
-     * Read the HYG database.
+     * Read the HYG database. (v3,
      */
     fun parse(): Stream<HygStar> {
+        val s = "input/hygdata_v3.csv"
+        // check if the file exists
+        val file = File(s)
+        if(!file.exists()) {
+            throw Error("You have to download 'hygdata_v3.csv' from https://github.com/astronexus/HYG-Database and put it in the input folder in order to use the HygParser class.")
+        }
+
         // get the csv reader
-        val csvReader = CSVReaderBuilder(FileReader("data/hygdata_v3.csv"))
+        val csvReader = CSVReaderBuilder(FileReader(file))
                 .withSkipLines(1)
                 .build()
 
         // stream the lines
-        // indices that we're interested in
+        // indices that we're interested in (check the documentation on astronexus' github)
         val id = 0
         val hip = 1
         val hd = 2
@@ -51,8 +61,8 @@ class HygParser {
         val varrrr = 34
         val var_min = 35
 
+        // convert the relevant information into a HygStar object
         return csvReader.map {
-            //        println("it = ${Arrays.toString(it)}")
             HygStar(
                     ra = it[ra].toDouble(),
                     dec = it[dec].toDouble(),
