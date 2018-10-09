@@ -29,7 +29,7 @@ class SvgCreator(val apparentMagnitudeCutOff: Double = 7.0,
                  val outputFile: File = File("output/stars.svg"),
                  val overwriteOutputFile: Boolean = true,
                  val nameOffset: Double = 0.5,
-                 val properNameSize: String = "1.2px",
+                 val properNameSize: String = "2px",
                  val properNameFont: String = "Trajan Pro",
                  val properNameItalic: Boolean = false
 ) {
@@ -85,7 +85,7 @@ class SvgCreator(val apparentMagnitudeCutOff: Double = 7.0,
                             .colorClassM5 { fill: #ffcc6f }
                             .colorClassDefault { fill: white }
                         </style>
-                        <circle cx="90" cy="90" r="90" stroke="white" stroke-width="1" fill="black" />""".trimIndent())
+                        <circle cx="90" cy="90" r="90" stroke="black" stroke-width="1" fill="black" />""".trimIndent())
 
             // loop over stars
             HygParser().parse()
