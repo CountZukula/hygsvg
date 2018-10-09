@@ -28,7 +28,10 @@ fun main(args: Array<String>) {
 class SvgCreator(val apparentMagnitudeCutOff: Double = 7.0,
                  val outputFile: File = File("output/stars.svg"),
                  val overwriteOutputFile: Boolean = true,
-                 val nameOffset: Double = 0.5
+                 val nameOffset: Double = 0.5,
+                 val properNameSize: String = "1.2px",
+                 val properNameFont: String = "Trajan Pro",
+                 val properNameItalic: Boolean = false
 ) {
 
     /**
@@ -71,7 +74,7 @@ class SvgCreator(val apparentMagnitudeCutOff: Double = 7.0,
             // this outputs some default styling... changes this if you want
             out.println("""<svg width="180" height="180">
                         <style>
-                            .properName { font: italic 1px sans-serif; stroke-width: 0.02px; stroke: black; }
+                            .properName { font: ${if(properNameItalic)"italic" else "normal"} $properNameSize "$properNameFont"; stroke-width: 0.02px; stroke: black; }
                             .constellationName { font: italic 0.2px sans-serif; stroke-width: 0.03px }
                             .colorClassO5 { fill: #9bb0ff }
                             .colorClassB5 { fill: #aabfff }
@@ -184,7 +187,9 @@ class SvgCreator(val apparentMagnitudeCutOff: Double = 7.0,
         }
         outputFile.printWriter().use(block)
 
+        println("Finished creating file, you can find it here: ${outputFile.absolutePath}")
     }
+
 }
 
 /**
