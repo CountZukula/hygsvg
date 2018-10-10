@@ -31,7 +31,8 @@ class SvgCreator(val apparentMagnitudeCutOff: Double = 7.0,
                  val nameOffset: Double = 0.5,
                  val properNameSize: String = "2px",
                  val properNameFont: String = "Trajan Pro",
-                 val properNameItalic: Boolean = false
+                 val properNameItalic: Boolean = false,
+                 val starRadiusMultiplier: Double = 0.07
 ) {
 
     /**
@@ -154,7 +155,7 @@ class SvgCreator(val apparentMagnitudeCutOff: Double = 7.0,
                             }
 
                             // determine the size of the circle -> depending on the apparent magnitude
-                            val circleR = ((star.mag - apparentMagnitudeCutOff) * -1) * 0.05
+                            val circleR = ((star.mag - apparentMagnitudeCutOff) * -1) * starRadiusMultiplier
 
                             // print name?
                             if (star.properName?.isNotEmpty() == true) {
